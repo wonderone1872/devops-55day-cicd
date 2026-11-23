@@ -13,8 +13,11 @@ jobs:
   build-and-push:
     runs-on: self-hosted
     steps:
-      - name: 检出代码
-        uses: actions/checkout@v4
+      - name: 检出代码(本地缓存,弱网教学环境加速)
+        # 真实项目请用 actions/checkout@v4；教学弱网环境从 runner 本地缓存取代码
+        run: |
+          cp -r /root/cicd-src/. .
+          echo "代码已就绪: $(ls)"
 
       - name: 运行单元测试
         run: python3 test_app.py
