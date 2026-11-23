@@ -36,10 +36,15 @@ jobs:
       - name: 部署到K8s
         run: |
           IMAGE=$(cat image_name.txt)
+          echo "部署镜像: $IMAGE"
           kubectl create namespace cicd-demo --dry-run=client -o yaml | kubectl apply -f -
+          # 首次创建Deployment;apply是幂等的,已存在会更新
           kubectl -n cicd-demo create deployment web --image="$IMAGE" \
             --dry-run=client -o yaml | kubectl apply -f -
-          kubectl -n cicd-demo set image deployment/web web="$IMAGE"
+          # 关键:set image 的容器名要动态取(create deployment默认容器名未必等于deployment名)
+          CNAME=$(kubectl -n cicd-demo get deploy web -o jsonpath='{.spec.template.spec.containers[0].name}')
+          echo "实际容器名: $CNAME"
+          kubectl -n cicd-demo set image deployment/web "$CNAME=$IMAGE"
           kubectl -n cicd-demo apply -f k8s/service.yaml
 
       - name: 滚动更新并验证
