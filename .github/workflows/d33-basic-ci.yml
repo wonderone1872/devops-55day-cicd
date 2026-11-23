@@ -1,0 +1,33 @@
+name: D33 基础CI流水线
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  basic-ci:
+    runs-on: self-hosted          # 跑在 node2 自建 runner 上（内网）
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 显示环境信息
+        run: |
+          echo "=== D33 基础CI 开始 ==="
+          echo "仓库: ${{ github.repository }}"
+          echo "提交: ${{ github.sha }}"
+          echo "触发者: ${{ github.actor }}"
+          echo "运行主机: $(hostname)"
+          echo "当前时间: $(date '+%F %T')"
+          echo "Python版本: $(python3 --version)"
+
+      - name: 运行单元测试
+        run: python3 test_app.py
+
+      - name: 构建产物归档
+        run: |
+          mkdir -p dist
+          cp app/index.html dist/
+          echo "构建产物:" && ls -lh dist/
+          echo "=== D33 基础CI 完成 ✅ ==="

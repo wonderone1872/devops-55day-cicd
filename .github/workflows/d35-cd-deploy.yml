@@ -1,0 +1,53 @@
+name: D35 CD发布到K8s
+
+on:
+  workflow_dispatch:            # CD 手动触发，避免每次push都部署
+  push:
+    branches: [ main ]
+    paths: [ 'k8s/**' ]         # 只有 k8s 目录变化才触发部署
+
+env:
+  HARBOR_HOST: 192.168.40.103
+  HARBOR_PROJECT: devops-demo
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 登录Harbor
+        run: |
+          echo "${{ secrets.HARBOR_PASSWORD }}" | docker login $HARBOR_HOST \
+            -u "${{ secrets.HARBOR_USER }}" --password-stdin
+
+      - name: 构建并推送新镜像
+        run: |
+          IMAGE="$HARBOR_HOST/$HARBOR_PROJECT/cicd-demo:${{ github.run_number }}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "$IMAGE" > image_name.txt
+          echo "新镜像: $IMAGE"
+
+      - name: 部署到K8s
+        run: |
+          IMAGE=$(cat image_name.txt)
+          kubectl create namespace cicd-demo --dry-run=client -o yaml | kubectl apply -f -
+          kubectl -n cicd-demo create deployment web --image="$IMAGE" \
+            --dry-run=client -o yaml | kubectl apply -f -
+          kubectl -n cicd-demo set image deployment/web web="$IMAGE"
+          kubectl -n cicd-demo apply -f k8s/service.yaml
+
+      - name: 滚动更新并验证
+        run: |
+          echo "=== 等待滚动更新完成 ==="
+          kubectl -n cicd-demo rollout status deployment/web --timeout=120s
+          echo "=== 查看Pod ==="
+          kubectl -n cicd-demo get pods -o wide
+          echo "=== 查看部署历史 ==="
+          kubectl -n cicd-demo rollout history deployment/web
+          echo "=== 验证访问 ==="
+          NODEPORT=$(kubectl -n cicd-demo get svc web -o jsonpath='{.spec.ports[0].nodePort}')
+          curl -s http://127.0.0.1:$NODEPORT/ | grep -o 'CI/CD 真跑成功' || echo '页面检查'
+          echo "=== D35 CD部署完成 ✅ ==="

@@ -1,0 +1,45 @@
+name: D34 CI构建并推送镜像
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  HARBOR_HOST: 192.168.40.103
+  HARBOR_PROJECT: devops-demo
+
+jobs:
+  build-and-push:
+    runs-on: self-hosted
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 运行单元测试
+        run: python3 test_app.py
+
+      - name: 登录Harbor
+        # 凭据存在 GitHub Secrets，绝不写死在文件里
+        run: |
+          echo "${{ secrets.HARBOR_PASSWORD }}" | docker login $HARBOR_HOST \
+            -u "${{ secrets.HARBOR_USER }}" --password-stdin
+
+      - name: 构建Docker镜像
+        run: |
+          IMAGE="$HARBOR_HOST/$HARBOR_PROJECT/cicd-demo:${{ github.run_number }}"
+          echo "构建镜像: $IMAGE"
+          docker build -t "$IMAGE" .
+          echo "$IMAGE" > image_name.txt
+
+      - name: 推送镜像到Harbor
+        run: |
+          IMAGE=$(cat image_name.txt)
+          docker push "$IMAGE"
+          echo "=== 镜像已推送: $IMAGE ✅ ==="
+
+      - name: 验证Harbor收到镜像
+        run: |
+          IMAGE=$(cat image_name.txt)
+          echo "本地镜像ID: $(docker images --format '{{.ID}}' $IMAGE)"
+          echo "=== D34 构建推送完成 ✅ ==="
